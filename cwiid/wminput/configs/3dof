@@ -1,0 +1,13 @@
+#6dof Be careful you need motionplus to have the 6 degrees of freedom
+include buttons
+
+
+#Plugin.3dof.Roll	= REL_Z
+Plugin.3dof.Yaw		= REL_X
+Plugin.3dof.Yaw_Scale = 0.05
+Plugin.3dof.Pitch	= REL_Y
+Plugin.3dof.Pitch_Scale = 0.05
+
+
+
+

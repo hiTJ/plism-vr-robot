@@ -1,0 +1,11 @@
+#mplus
+
+include buttons
+
+Plugin.mplus.X	= REL_X
+Plugin.mplus.Y	= REL_Y
+
+# You can set Plugin.led.Led[1->4] to 1
+# to have that led be active all the time
+Plugin.led.Led3 = 1
+

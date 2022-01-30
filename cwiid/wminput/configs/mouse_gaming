@@ -1,0 +1,17 @@
+Plugin.nunchuk_mouse.X = REL_X
+Plugin.nunchuk_mouse.Y = -REL_Y
+
+Nunchuk.C = KEY_C
+Nunchuk.Z = KEY_Z
+
+Wiimote.A       = BTN_LEFT
+Wiimote.B       = BTN_RIGHT
+Wiimote.Up      = KEY_UP
+Wiimote.Down    = KEY_DOWN
+Wiimote.Left    = KEY_LEFT
+Wiimote.Right   = KEY_RIGHT
+Wiimote.Minus   = KEY_BACK
+Wiimote.Plus    = KEY_FORWARD
+Wiimote.Home    = KEY_ESC
+Wiimote.1       = KEY_1
+Wiimote.2       = KEY_2

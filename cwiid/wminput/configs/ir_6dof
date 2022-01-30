@@ -1,0 +1,12 @@
+#ir_6dof Be careful you need a custom 4 led beacon to have the 6 degrees of freedom
+
+#Plugin.ir_6dof.X		= REL_X
+#Plugin.ir_6dof.Y		= REL_Y
+#Plugin.ir_6dof.Z		= REL_Z
+#Plugin.ir_6dof.Roll		= REL_WHEEL
+#Plugin.ir_6dof.Roll_Scale = 10
+Plugin.ir_6dof.Yaw		= REL_X
+Plugin.ir_6dof.Pitch	= REL_Y
+Wiimote.A				= KEY_SPACE
+Wiimote.B				= BTN_LEFT
+

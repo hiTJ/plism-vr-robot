@@ -1,0 +1,13 @@
+*.d
+*.o
+*.a
+*.pc
+*.so
+*.so.*
+Makefile
+aclocal.m4
+autom4te.cache
+config.*
+configure
+defs.mak
+configure.ac.orig

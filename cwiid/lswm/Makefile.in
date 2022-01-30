@@ -1,0 +1,19 @@
+#Copyright (C) 2007 L. Donnie Smith
+
+include @top_builddir@/defs.mak
+
+APP_NAME = lswm
+
+SOURCES = lswm.c
+
+CFLAGS += -I@top_srcdir@/libcwiid
+LDFLAGS += -L@top_builddir@/libcwiid
+LDLIBS += -lcwiid -lbluetooth
+INST_DIR = @bindir@
+
+include $(APPINC)
+
+distclean: clean
+	rm Makefile
+
+.PHONY: distclean

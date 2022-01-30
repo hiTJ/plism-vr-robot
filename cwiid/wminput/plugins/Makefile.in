@@ -1,0 +1,17 @@
+#Copyright (C) 2007 L. Donnie Smith
+
+include @top_builddir@/defs.mak
+
+PLUGINS = 3dof acc ir_ptr ir_6dof led mplus nunchuk_acc nunchuk_mouse nunchuk_stick2btn nunchuk_stick_ptr screwdriver
+
+all install clean distclean uninstall: TARGET += $(MAKECMDGOALS)
+
+all install clean distclean uninstall: $(PLUGINS)
+
+$(PLUGINS):
+	$(MAKE) $(TARGET) -C $@
+
+distclean: clean
+	rm Makefile
+
+.PHONY: all install clean distclean uninstall $(PLUGINS)
