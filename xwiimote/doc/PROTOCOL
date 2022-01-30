@@ -1,0 +1,477 @@
+= Nintendo Wii Remote Protocol =
+The wiimote communicates via standard bluetooth technology
+with the host. This document is divided into two parts. The
+first part described the low-level bluetooth connection that
+is established between the host and the wiimote with
+pairing support. The second part is about the protocol that
+is used to communicate with the wiimote.
+
+  == Bluetooth Connection ==
+  The wiimote can be in the following states:
+    off: The wiimote power is turned off and no interactions
+         are possible.
+    discoverable: The wiimote is not connected to any host but
+         put into bluetooth discoverable mode. Furthermore, it
+         is possible to establish a new bluetooth baseband
+         connection to the wiimote.
+    connecting: The wiimote is currently establishing a connection
+         with a host or vice versa.
+    connected: The wiimote is currently connected to a host.
+
+    === Discoverable State ===
+    The wiimote is built around a Broadcom bluetooth chip that
+    can be placed into discoverable mode in two ways:
+     1: Pressing the red sync-button behind the battery-cover
+        on the back of the wiimote. This will place the wiimote
+        directly into discoverable mode for exactly 20 seconds
+        and then turn the wiimote off again.
+     2: Holding down the 1 and 2 buttons on the front of the
+        wiimote will put the wiimote into discoverable mode.
+        First, the wiimote performs auto-reconnect and if that
+        fails it goes into discoverable mode. If the buttons
+        are held down continuously, the wiimote will stay in
+        discoverable mode, otherwise it turns off after 20
+        seconds.
+    When in discoverable mode, the wiimote is seen as:
+      "Nintendo RVL-CNT-01"
+    For all later references in this document, we assume the
+    wiimote has the following bluetooth address:
+      "00:1E:35:3B:7E:6D"
+    The binary representation of BD-addresses is in reversed order
+    so this would be the six byte array:
+      0x6d 0x7e 0x3b 0x35 0x1e 0x00
+    When in discoverable mode, a host may establish a new bluetooth
+    baseband connection to the wiimote. Every host is allowed to do
+    that. No encryption nor pairing is required.
+
+    When in discoverable mode, all four LEDs on the wiimote will
+    blink when the battery is full. With lower battery status, less
+    LEDs will blink. If the battery is nearly empty, only the left
+    most LED blinks.
+
+    === Connecting State ===
+    There are two ways to establish a connection with a wiimote:
+     1: Initiate a baseband connection to the wiimote while the
+        wiimote is in discoverable state.
+     2: Let the wiimote auto-reconnect to your host.
+
+      ==== Initiating a Connection ====
+      When the wiimote is in discoverable state, any bluetooth host
+      can create a new baseband BR/EDR bluetooth connection to the
+      wiimote. There are no special considerations or non-standard
+      procedures.
+      However, optionally, you may initiate pairing with the wiimote.
+      This is not required and may be skipped, though,
+      auto-reconnection can only be used when the host is paired
+      with the wiimote.
+
+      Pairing can be initiated by sending an HCI authentication request.
+      The bluetooth stack will require a PIN for legacy pairing. This
+      PIN depends on the method used to put the wiimote into
+      discoverable mode. If method (1) was used (that means, the red
+      sync button was pressed) then the PIN is the bluetooth address
+      of the host in binary form (that is reversed order). If the buttons
+      1+2 were used (that is method (2)), then the PIN is the address
+      of the wiimote in binary form. In our case this would be the 6-byte
+      array:
+        0x6d 0x7e 0x3b 0x35 0x1e 0x00
+      When pairing is done, all further connections may use the new
+      link-key instead of PIN-requests, but this should be handled by
+      the bluetooth stack automatically.
+
+      When the wiimote is paired with a host with method (1) (And only
+      with this method! That is, red sync button!) then the wiimote
+      will save the bluetooth address of the host for further reference
+      so it can automatically reconnect to the host on disconnection.
+
+      ==== Auto-Reconnection ====
+      The wiimote maintains a list of bluetooth addresses of hosts that
+      it was connected to and paired with. If any single button on the
+      wiimote is pressed while it is turned off, the wiimote turns on
+      and tries to connect to one of the hosts in this list. It tries
+      only once so you may need to press a single button multiple times
+      to get connected to a host.
+      It is currently impossible to control which host is tried first.
+      Moreover, it is unknown how many addresses the wiimote can save
+      so it may take many times (5 times, 10 times or even more) until
+      the wiimote connects to an available host. If more than one host
+      is available, it is not possible to predict what host the wiimote
+      connects to.
+      However, it seems that the wiimote maintains an internal sorted
+      list of hosts and if it successfully connects to a host, this host
+      is put on top of this list and hence tried first next time.
+
+      When using auto-reconnection, no pairing is required and pairing
+      does not provide any more functionality here.
+
+      ==== SDP Information ====
+      When a low-level connection is established, you may query the SDP
+      server of the xwiimote which returns a great deal of information:
+       * Name: "Nintendo RVL-CNT-01"
+       * PnP: VendorID: 0x057e ProductID: 0x0306
+      And a lot more PnP, SDP and HID related information.
+
+    When the low-level baseband connection is established, the l2cap
+    channels can be opened. On auto-reconnection, the wiimote will connect
+    to the host (that is, the host must listen on the l2cap channels).
+    If the connection is initiated by the host, then the wiimote listens
+    for incoming connections on the l2cap channels.
+    Two l2cap channels are used for communication:
+     * Channel PSM 0x11 for sending data to the Wiimote
+     * Channel PXM 0x13 for receiving data from the Wiimote
+    Both must be opened for communication with the wiimote.
+    No further steps are required to setup the connection with the wiimote.
+    The wiimote is considered to be in "connected" state now.
+
+    === Connected State ===
+    When in connected state, the host can communicate with the wiimote. The
+    protocol used for communication is described below in "Fake-HID Protocol".
+    To shutdown the connection, simply shut down the l2cap connections to the
+    wiimote. The wiimote will shut down the connection when the "power"-button
+    is pressed for 3 seconds.
+
+  == Fake-HID Protocol ==
+  Communication is done via HID input/output reports. The wiimote's HID
+  descriptor table does not contain any information about the reports except
+  the data length. Many bits in the commands are still unknown and shall be
+  initialized to 0 to avoid unwanted behaviour.
+
+    === Reports ===
+    Following a list of all input and output reports. Many reports include the
+    same information. These common structures are listed separately and each
+    report that uses them just refers to them. Every report is built as a byte
+    array of a fixed length. The array shall be initialized to 0 if not noted
+    otherwise. If a report has a variable length parameter with a fixed
+    maximum, then always the trailing bytes shall be padded with 0 if not used.
+    Multibyte integers are always in big-endian format.
+
+    A single report is constructred the following way:
+      report[0] = 0xa1 (for input reports)
+      report[0] = 0x52 (for output reports)
+      report[1] = <report>
+      report[2-X] = <payload>
+    The first byte is the HID command which is the same for all input and output
+    reports. They are often omitted or automatically set by your HID layer. See
+    your kernel/library documentation.
+    The second byte is the report identifier. Byte 3 up to X is the report
+    payload. Each report has a fixed length that specifies how long this payload
+    is (without the report byte).
+    A report with length 8 would need 10 bytes to be constructed:
+      8 payload bytes + 1 HID byte + 1 report byte = 10 bytes
+    The "Data" decription of each report below gives a short overview of how the
+    report is assembled. Each integer is given as hexadecimal number without the
+    0x prefix. Two characters form a single byte.
+
+      ==== Common (Output) ====
+      Length: 1
+      Data: CC
+      This is no real output report but rather a common structure that is used
+      in almost all other output reports.
+      Byte 1 (CC) contains the following flags:
+        0x01: This enables the rumble motor. This flag must be set on every
+              output to keep the rumble motor running. If this flag is not set
+              then the rumble is disabled.
+        0x02: This requests a report acknowledgement. The wiimote will send a
+              0x22 input report in response to this report.
+        0x04: Enable flag. This has different meanings depending on the output
+              report but is generally used to enable/disable the requested
+              feature.
+        0x08: unknown
+        0xf0: The upper bits are used by different output reports for special
+              features.
+
+      ==== Rumble Report (Output) ====
+      Report: 0x10
+      Length: 1
+      Data: 52 10 CC
+      Payload information contains only the common output report. This report is
+      no special rumble report, because rumble is enabled and disabled with
+      every output report that includes the common output report.
+      However, this report has no side effects so it may be used to affect the
+      rumble motor without changing any other peripheral.
+
+      ==== LED Report (Output) ====
+      Report: 0x11
+      Length: 1
+      Data: 52 11 CC
+      Payload includes only the common output report. The upper 4 bits of the
+      common output report set the different leds:
+        0x10: LED 1
+        0x20: LED 2
+        0x40: LED 3
+        0x80: LED 4
+      Turning all four LEDs off for too long is discouraged since it may lead
+      the user to believe the wiimote is turned off while it is still turned on.
+      Brightness modulation can be achieved by turning the leds off and on very
+      fast.
+
+      ==== DRM Set Report (Output) ====
+      Report: 0x12
+      Length: 2
+      Data: 52 12 CC MM
+      The first byte is the common output report. The Enable Flag in the common
+      output report (0x04) is used to enabled or disable continuous input
+      reporting. If enabled, the wiimote continously sends input reports to the
+      host. If disabled, the wiimote sends input reports only when data has
+      changed.
+      The second byte is used to request a specific data reporting mode (DRM).
+      You should set it to the report identifier of the request input report.
+      The wiimote will send data input reports always with the requested DRM.
+      Upon powerup, the DRM defaults to 0x30. After an extension is (un)plugged,
+      data reporting is disabled and needs to be reset with this report.
+      A specific DRM does not explicitely enable or disable the peripherals of
+      the wiimote. The wiimote simply pulls the data from its peripherals, puts
+      it into the output report and sends it to the host. If the requested DRM
+      needs data from a disabled peripheral, then the data is set to 0 in the
+      input report. You have to enabled/disable the specific peripherals of the
+      wiimote independently.
+      Also the requested DRM should match the current data mode of each
+      peripheral. For example if the IR is in extended state, then it reports
+      IR data only if the requested DRM has 12 IR bytes. It must have exactly
+      12 bytes, not 10 and not 36!
+      However, each peripheral will give hints what DRM to use below.
+
+      ==== IR Set1 Report (Output) ====
+      Report: 0x13
+      Length: 1
+      Data: 52 13 CC
+      This request is used to enable the IR camera. The payload is the common
+      output report. The Enable Flag (0x04) of the common output report is used
+      to enable or disable the IR camera.
+      This is only one part of the initialization procedure of the IR camera.
+      See below for full instructions how to initialize IR.
+
+      ==== Speaker Set Report (Output) ====
+      Report: 0x14
+      Length: 1
+      Data: 52 14 CC
+      This request is used to enable the speaker. The payload is the common
+      output report. The Enable Flag (0x04) of the common output report is used
+      to enable or disable the speaker.
+      This is only one part of the initialization procedure of the speaker.
+      See below for full instructions how to initialize the speaker.
+
+      ==== Status Request Report (Output) ====
+      Report: 0x15
+      Length: 1
+      Data: 52 15 CC
+      The payload is the common output report with no special flags. This report
+      requests a status report from the wiimote. The wiimote will answer with
+      input report 0x20.
+
+      ==== Write Memory Report (Output) ====
+      Report: 0x16
+      Length: 21
+      Data: 52 16 CC OO OO OO SS DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD
+      This writes data into the wiimote's EEPROM or registers. The first byte is
+      the common output report. Its Enable Flag (0x04) specifies the namespace.
+      If set, then the wiimote's registers are written, otherwise the EEPROM is
+      written.
+      The following 3 bytes OO OO OO specify the offset where to start the write
+      followed by one byte SS specifying the size of the data that is written.
+      SS can be a maximum of 16.
+      The rest of the report is the data (DD). Trailing bytes are padded with 0.
+      Acknowledgement is always received via input report 0x22.
+
+      ==== Read Memory Report (Output) ====
+      Report: 0x17
+      Length: 6
+      Data: 52 17 CC OO OO OO SS SS
+      This request a memory read of the wiimote's EEPROM or registers. The first
+      byte (CC) is the common output report. Its Enable Flag (0x04) specifies
+      whether EEPROM or registers shall be read. If set, the registers are read,
+      otherwise internal EEPROM is read.
+      The following three bytes OO OO OO specify the data offset where to start
+      the memory read. The last two bytes SS SS specify the amount of data that
+      is read starting at the offset.
+
+      ==== Speaker Data Report (Output) ====
+      Report: 0x18
+      Length: 21
+      Data: 52 18 CC DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD
+      This sends speaker data to the wiimote. The exact format of the data is
+      described below in the speaker peripheral details.
+      The first byte is the common output report. The upper 5 bits of the common
+      output report specify the size of the data payload (they shall be shifted
+      right for 3 bits). All following bytes (DD) contain the sound data that
+      is sent to the speaker.
+
+      ==== Speaker Mute Report (Output) ====
+      Report: 0x19
+      Length: 1
+      Data: 52 19 CC
+      This mutes or unmutes the speaker. The payload is the common output report
+      and the Enable Flag (0x04) specifies whether to mute (if enabled) or to
+      unmute (if disabled) the speaker.
+
+      ==== IR Set2 Report (Output) ====
+      Report: 0x1a
+      Length: 1
+      Data: 52 1a CC
+      This has the same syntax as "IR Set1 Report" and is also used to
+      initialize the IR camera.
+
+      ==== Common (Input) ====
+      Length: 2
+      Data: BB BB
+      This is no real input report but rather a common structure that is used in
+      almost all other input reports. The two BB BB bytes include the current
+      state of the buttons on the wiimote.
+      If the following flags are set, then the related button is currently
+      pressed:
+              Byte 1:   Byte 2:
+        0x01: Left      Two
+        0x02: Right     One
+        0x04: Down      B
+        0x08: Up        A
+        0x10: Plus      Minus
+        0x20: -         -
+        0x40: -         -
+        0x80: <undef>   Home
+      The power-button is never included in input reports. The 0x80 flag of byte
+      one is never used.
+      The bits 0x20 and 0x40 of both bytes are not used for button information
+      but often include important LSB/MSBs or other flags of the surrounding
+      input report. They are referred to as "Special Flags" of the common input
+      report.
+      The sync button on the back of the wiimote is also never included in the
+      button input report.
+
+      ==== Status Report (Input) ====
+      Report: 0x20
+      Length: 6
+      Data: a1 20 BB BB LF UU UU VV
+      This is sent in request to Status Request Report (0x15) and also when an
+      extension is plugged or unplugged. In the latter case you need to reset
+      the DRM mode (see DRM Set Report), otherwise not further input reports
+      will be sent.
+      The first two bytes of this report include the common input report. The
+      last byte VV is the current battery level from 0-255 where 0 is empty and
+      255 is full. The four upper bits of LF (L) are the leds:
+        0x10: LED 1
+        0x20: LED 2
+        0x40: LED 3
+        0x80: LED 4
+      These flags are set if the related LED is enabled.
+      The lower 4 bits of LF (F) specfiy different things:
+        0x01: Set if battery is nearly empty
+        0x02: Set if an extension is plugged
+        0x04: Set if speaker is enabled
+        0x08: Set if IR is enabled
+      The two bytes in between (UU UU) are always zero and its unknown why they
+      exist.
+
+      ==== Memory Report (Input) ====
+      Report: 0x21
+      Length: 21
+      Data: a1 21 BB BB SE OO OO DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD DD
+      This is sent when data is read via read-memory request. The first two
+      bytes include the common input information. The upper bits in SE are the
+      size of the data that is read minus one (0xff => 16 byte, 0x00 => 1 byte)
+      and the lower bits of SE are the error flag which is 0 when everything is
+      ok, 7 when reading write-only memory and 8 when reading from unexisting
+      memory. Other error flags are unknown.
+      The two OO bytes are the lower 2 bytes of the offset. The upper two bytes
+      are not reported back and must be known by the caller. The 16 DD bytes are
+      the actual data and padded with zeros at the end if less data than 16
+      bytes were read.
+      If the read-memory request has read more than 16 bytes, multiple responses
+      are sent with the offset increased by 16 each time. Input reporting is
+      disabled during those reads and continues after the read is done.
+
+      ==== Result Report (Input) ====
+      Report: 0x22
+      Length: 4
+      Data: a1 22 BB BB RR EE
+      This report is sent when a output report failed or explicit
+      acknowledgement was requested by the caller via 0x02 bit in the common
+      output request. The two BB bytes include the common input information, the
+      RR byte is the number of the related report that this report is the result
+      of. The EE byte is the error identifier: 0 if everything was ok, and >0
+      on error. The meaning of each error number is unknown.
+
+      ==== DRM reports (Input) ====
+      All following reports are used to report input information to the host.
+      The DRM-set output report is used to select the DRM report that is used
+      for input reports.
+
+      ==== DRM B ====
+      Report: 0x30
+      Length: 2
+      Data: a1 30 BB BB
+
+      ==== DRM BA ====
+      Report: 0x31
+      Length: 5
+      Data: a1 31 BB BB AA AA AA
+
+      ==== DRM BE ====
+      Report: 0x32
+      Length: 10
+      Data: a1 32 BB BB EE EE EE EE EE EE EE EE
+
+      ==== DRM BAI ====
+      Report: 0x33
+      Length: 17
+      Data: a1 33 BB BB AA AA AA II II II II II II II II II II II II
+
+      ==== DRM BEE ====
+      Report: 0x34
+      Length: 21
+      Data: a1 34 BB BB EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE
+
+      ==== DRM BAE ====
+      Report: 0x35
+      Length: 21
+      Data: a1 35 BB BB AA AA AA EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE
+
+      ==== DRM BIE ====
+      Report: 0x36
+      Length: 21
+      Data: a1 36 BB BB II II II II II II II II II II EE EE EE EE EE EE EE EE EE
+
+      ==== DRM BAIE ====
+      Report: 0x37
+      Length: 21
+      Data: a1 37 BB BB AA AA AA II II II II II II II II II II EE EE EE EE EE EE
+
+      ==== DRM E ====
+      Report: 0x3d
+      Length: 21
+      Data: a1 3d EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE EE
+
+      ==== DRM SBAI1 ====
+      Report: 0x3e
+      Length: 21
+      Data: a1 3e BB BB AA II II II II II II II II II II II II II II II II II II
+
+      ==== DRM SBAI2 ====
+      Report: 0x3f
+      Length: 21
+      Data: a1 3f BB BB AA II II II II II II II II II II II II II II II II II II
+
+== Authors ==
+This document is written by:
+ * David Herrmann - dh.herrmann@googlemail.com
+The following people contributed to this document:
+ * WiiBrew Project: http://www.wiibrew.org/
+                    http://www.wiibrew.org/wiki/Wiimote
+ * BlueZ Mailing List: http://www.bluez.org/
+ * Wiimote Project: http://www.wiimoteproject.com/
+ * Wiiuse: http://sourceforge.net/projects/wiiuse
+ * WiiYourself: http://wiiyourself.gl.tter.org/
+
+== Links ==
+ * Gyro hardware: http://invensense.com/mems/gyro/idg650.html
+
+== Unknown ==
+The following list contains protocol details which where not
+investigated and are still unknown:
+  * What happens if two hosts try to connect to the wiimote?
+  * Does the Wiimote implement the BT HID profile or just use
+    HID commands via an l2cap channel?
+  * How many host can be saved for auto-reconnection on the
+    wiimote?
+  * How to manage the list of auto-reconnection hosts?
+  * How to reset the wiimote?
+  * Is pairing possible when using auto-reconnection? Which key to use?

@@ -1,0 +1,19 @@
+= Development =
+
+This file contains information about the development of this software package.
+This contains no information for end-users.
+
+== Git ==
+
+This software is developed in a git-repository hosted by github:
+  https://github.com/dvdhrm/xwiimote
+
+The related linux device driver development is hosted at kernel.org:
+  http://git.kernel.org
+The driver is developed upstream. Discussion takes place at
+  linux-input@vger.kernel.org
+
+== Changelog ==
+
+There is no classic changelog file. See the git history for a comprehensive
+changelog.

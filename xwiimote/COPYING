@@ -1,0 +1,21 @@
+= Licensing Information =
+
+This software package is licensed under a MIT-like license. See LICENSE for
+the licensing terms. This applies to all files (code, documentation, ...)
+shipped with this distribution. If a specific file has no license header, the
+header in LICENSE shall apply. If a file has a license header which differs from
+LICENSE, then the license terms specified in this file shall apply.
+
+== Developers ==
+
+This software is written by:
+  David Herrmann - dh.herrmann@gmail.com
+
+== Contributors ==
+
+This project could not have been realized without several other software
+projects. We are very grateful to the following people and projects for
+their contributions:
+  Linux Kernel - http://www.kernel.org
+  BlueZ - http://www.bluez.org
+  WiiBrew Project - http://www.wiibrew.org/
