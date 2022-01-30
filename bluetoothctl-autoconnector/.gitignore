@@ -1,0 +1,4 @@
+list
+
+log/*
+!log/.keep

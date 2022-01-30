@@ -1,0 +1,701 @@
+#!/bin/bash
+
+# The origin of the command name is "blue fast animal"
+# It stands for the command to operate bluetoothctl quickly
+#
+# https://onekindplanet.org/top-10/top-10-worlds-fastest-animals/
+
+
+PROGNAME=$(basename $0)
+FULLPATH=$(dirname $(realpath $0))
+LOGPATH=$FULLPATH/../log/latest.log
+ALIASPATH=~/.marlin_aliases
+SAMPLE_SOUND=/usr/share/sounds/alsa/Rear_Center.wav
+
+INTERVAL_AFTER_SELECT=1
+INTERVAL_AFTER_POWER_ON=3
+
+INTERVAL_AFTER_PAIRED_DEVICES=2
+INTERVAL_AFTER_SCAN_ON=5
+INTERVAL_AFTER_PAIR=5
+INTERVAL_AFTER_YES=5
+INTERVAL_AFTER_TRUST=2
+INTERVAL_AFTER_SCAN_OFF=2
+INTERVAL_AFTER_CONNECT=3
+
+INTERVAL_AFTER_REMOVE=3
+INTERVAL_AFTER_ANY_OTHER_COMMAND=3
+
+INTERVAL_AFTER_DAEMON_RESTART=1.5
+
+
+function main() {
+  IFS=$'\n'
+
+  adapters=()
+  adapters_cmd=()
+
+  initialize_options
+
+  case "$subcommand" in
+    "" | "list")
+      case "${argv[0]}" in
+        "")
+          list
+        ;;
+        "diff")
+          diff
+        ;;
+        *)
+          echo "Unknown command: ${argv[0]}" >&2
+          exit 1
+        ;;
+      esac
+    ;;
+    "alias")
+      case "${argv[0]}" in
+        "")
+          alias
+        ;;
+        "edit")
+          $EDITOR $ALIASPATH
+        ;;
+        "diff")
+          diff
+        ;;
+        *)
+          echo "Unknown command: ${argv[0]}" >&2
+          exit 1
+        ;;
+      esac
+    ;;
+    "show")
+      show
+    ;;
+    "register")
+      if [[ "${argv[0]}" = "" ]]; then
+        echo "Device is missing" >&2
+        exit 1
+      fi
+
+      while [[ "${argv[0]}" != "" ]]; do
+        register
+        argv=( "${argv[@]:1}" )
+        if [[ "${argv[0]}" != "" ]]; then echo; fi
+      done
+    ;;
+    "pulse")
+      pulse
+    ;;
+    "list-sink-inputs")
+      list_sink_inputs
+    ;;
+    "log")
+      less +F $LOGPATH
+    ;;
+    "health")
+      health
+    ;;
+    "refresh")
+      refresh
+    ;;
+    "is-refreshed")
+      is_refreshed
+    ;;
+    "play")
+      play
+    ;;
+    *)
+      if [[ "${argv[0]}" = "" ]]; then
+        echo "Device is missing" >&2
+        exit 1
+      fi
+
+      while [[ "${argv[0]}" != "" ]]; do
+        operate
+        argv=( "${argv[@]:1}" )
+        if [[ "${argv[0]}" != "" ]]; then echo; fi
+      done
+    ;;
+  esac
+}
+
+
+function get_adapters() {
+  # this function works only one time with each command execution
+  if [[ "${adapters[@]}" != "" ]]; then
+    return
+  fi
+
+  while read line
+  do
+    adapter=$(echo $line | sed -r 's/^.*(([0-9A-F]{2}:){5}[0-9A-F]{2}).*$/\1/')
+    adapters=(${adapters[@]} "$adapter")
+    adapters_cmd=(${adapters_cmd[@]} "select $adapter\n\npaired-devices\n\n")
+    adapters_info=(${adapters_info[@]} "select $adapter\n\nshow\n\n")
+  done <<< "$(bluetoothctl -- list)"
+
+  if [[ "${argv[0]}" = "all" ]] && [[ "${argv[1]}" = "" ]]; then
+    argv=( $(list | sed -r "s/([0-9A-F]{2}:){5}[0-9A-F]{2} //g" | sed -r "s/ /\\\ /g") )
+  fi
+}
+
+
+function list() {
+  get_adapters
+  paired_devices=$(echo -e ${adapters_cmd[@]} | bluetoothctl | grep "Device " | sed -e "s/^Device //" | sort)
+
+  if [[ "${paired_devices}" != "" ]]; then
+    echo "${paired_devices}"
+  else
+    echo "No paired devices found" >&2
+  fi
+}
+
+
+function alias() {
+  cat $ALIASPATH | awk '{ sub("#.*$", ""); print $0; }' | sed -e 's/[ \t]*$//' | sed -e 's/^[ \t]*//' | sed -e '/^$/d' | sort
+}
+
+
+function diff() {
+  if type colordiff 1>/dev/null 2>/dev/null; then
+    colordiff -u <(alias) <(list) | grep -Ev -e "---.*$" -e "\+\+\+.*$" -e "@@.*$"
+  else
+    diff -u <(alias) <(list) | grep -Ev -e "---.*$" -e "\+\+\+.*$" -e "@@.*$"
+  fi
+}
+
+
+function show() {
+  require ruby
+
+  get_adapters
+
+  echo -e ${adapters_info[@]} |
+    bluetoothctl |
+    sed "s/^[ \t]*//" |
+    grep -E -e "^Controller ([0-9A-F]{2}:){5}[0-9A-F]{2} \(.*\)" -e "^Class: " -e "^Powered: " -e "^Discoverable: " -e "^DiscoverableTimeout: " -e "^Pairable: " -e "^Discovering: " |
+    sed -r "s/^Controller (([0-9A-F]{2}:){5}[0-9A-F]{2}) \(.*\)/Controller: \1/g" |
+    /usr/bin/env ruby -ne 'puts $_.gsub(/^DiscoverableTimeout: (.*?)$/) { "DiscoverableTimeout: #{$1} (#{$1.to_i(16)} sec)" }' |
+    sed -E "s/^Discovering: (.*)/Discovering: \1\n/g" |
+    head -c -1 | # delete last extra empty line
+    egrep -e "|Powered: no" -e "|Discoverable: yes" -e "|Pairable: no" -e "|Discovering: yes" --color
+}
+
+
+function operate() {
+  get_adapters
+  target_extract=$(echo -e "${adapters_cmd[@]}" | bluetoothctl | grep -E "^Device " -B 2 | grep -i -E "^Device ([0-9A-F]{2}:){5}[0-9A-F]{2} ${argv[0]}" -B 2)
+
+  if [[ "${target_extract}" = "" ]]; then
+    echo "No such device registered: ${argv[0]}" >&2
+    echo
+    echo "The following command might help you" >&2
+    echo "$PROGNAME register ${argv[0]}" >&2
+    exit 2
+  fi
+
+  device=$(echo "${target_extract}" | grep "Device " | awk '{print $2}')
+  adapter=$(echo "${target_extract}" | grep -oE -e "Controller ([0-9A-F]{2}:){5}[0-9A-F]{2}" -e "select ([0-9A-F]{2}:){5}[0-9A-F]{2}" | awk '{print $2}')
+
+  case "$subcommand" in
+    "info" | "status")
+      echo -e "select ${adapter}\n\ninfo ${device}\n\n" |
+        bluetoothctl |
+        grep -e "Name: " -e "Paired: " -e "Trusted: " -e "Blocked: " -e "Connected: " |
+        sed "s/^[ \t]*//" |
+        egrep -e "|Paired: no" -e "|Trusted: no" -e "|Blocked: yes" -e "|Connected: no" --color
+    ;;
+    "remove" | "delete")
+      {
+        printf "select ${adapter}\n\n"
+        sleep $INTERVAL_AFTER_SELECT
+        printf "power on\n\n"
+        sleep $INTERVAL_AFTER_POWER_ON
+
+        printf "paired-devices\n\n"
+        sleep $INTERVAL_AFTER_PAIRED_DEVICES
+
+        while [[ "$(paired_devices)" != "" ]]
+        do
+          printf "remove ${device}\n\n"
+          sleep $INTERVAL_AFTER_REMOVE
+        done
+
+        printf "exit\n\n"
+      } | bluetoothctl
+    ;;
+    "connect")
+      {
+        printf "select ${adapter}\n\n"
+        sleep $INTERVAL_AFTER_SELECT
+        printf "power on\n\n"
+        sleep $INTERVAL_AFTER_POWER_ON
+
+        while [[ "$(connected)" != "yes" ]]
+        do
+          printf "connect ${device}\n\n"
+          sleep $INTERVAL_AFTER_CONNECT
+
+          let retry_count--
+          if [ "$retry_count" -le 0 ]; then
+            break
+          fi
+        done
+
+        printf "exit\n\n"
+      } | bluetoothctl
+    ;;
+    *)
+      {
+        printf "select ${adapter}\n\n"
+        sleep $INTERVAL_AFTER_SELECT
+        printf "power on\n\n"
+        sleep $INTERVAL_AFTER_POWER_ON
+
+        printf "$subcommand ${device}\n\n"
+        sleep $INTERVAL_AFTER_ANY_OTHER_COMMAND
+
+        printf "exit\n\n"
+      } | bluetoothctl
+    ;;
+  esac
+}
+
+
+function register() {
+  if [ ! -e $ALIASPATH ]; then
+    touch $ALIASPATH
+  fi
+
+  device_hit_count=$(alias | grep -c -i "${argv[0]}")
+
+  if [[ "$device_hit_count" -eq 0 ]]; then
+    echo -e "No such device: ${argv[0]}\n" >&2
+    echo "Hint: use $ALIASPATH like this" >&2
+    echo "echo \"<YOUR_DEVICE_BD_ADDRESS> <YOUR_DEVICE_NAME>\" >> $ALIASPATH" >&2
+    exit 2
+  elif [[ "$device_hit_count" -ge 2 ]]; then
+    echo "Too many devices hit by word \"${argv[0]}\"" >&2
+    exit 2
+  fi
+
+  not_paired_adapter=""
+  while read line
+  do
+    adapter=$(echo $line | sed -r 's/^.*(([0-9A-F]{2}:){5}[0-9A-F]{2}).*$/\1/')
+
+    not_paired_adapter=$(paired_devices)
+    if [[ "$not_paired_adapter" = "" ]]; then
+      not_paired_adapter=$adapter
+      break
+    fi
+  done <<< "$(bluetoothctl -- list)"
+
+  if [[ "$not_paired_adapter" = "" ]]; then
+    echo "No free adapters found" >&2
+    exit 2
+  fi
+
+  device=$(alias | grep -i "${argv[0]}" | grep -o -E "([0-9A-F]{2}:){5}[0-9A-F]{2}")
+
+  {
+    printf "select $not_paired_adapter\n\n"
+    sleep $INTERVAL_AFTER_SELECT
+
+    while [[ "$(powered)" != "yes" ]]
+    do
+      printf "power on\n\n"
+      sleep $INTERVAL_AFTER_POWER_ON
+    done
+
+    printf "paired-devices\n\n"
+    sleep $INTERVAL_AFTER_PAIRED_DEVICES
+
+    printf "scan on\n\n"
+    sleep $INTERVAL_AFTER_SCAN_ON
+
+    while [[ "$(paired_devices)" != "$device" ]]
+    do
+      printf "pair $device\n\n"
+      sleep $INTERVAL_AFTER_PAIR
+      printf "yes\n\n"
+      sleep $INTERVAL_AFTER_YES
+    done
+
+    while [[ "$(trusted)" != "yes" ]]
+    do
+      printf "trust $device\n\n"
+      sleep $INTERVAL_AFTER_TRUST
+    done
+
+    printf "scan off\n\n"
+    sleep $INTERVAL_AFTER_SCAN_OFF
+
+    while [[ "$(connected)" != "yes" ]]
+    do
+      printf "connect $device\n\n"
+      sleep $INTERVAL_AFTER_CONNECT
+    done
+
+    printf "exit\n\n"
+  } | bluetoothctl
+}
+
+
+function paired_devices() {
+  {
+    printf "select $adapter\n\n"
+    printf "paired-devices\n\n"
+  } | bluetoothctl | grep "Device " | sed -r 's/^.*(([0-9A-F]{2}:){5}[0-9A-F]{2}).*$/\1/'
+}
+
+
+function powered() {
+  {
+    printf "select $not_paired_adapter\n\n" # TODO: may need to change $(appropriate_adapter)
+    printf "show\n\n"
+  } | bluetoothctl | grep "Powered: " | sed -r 's/^.*(yes|no).*$/\1/'
+}
+
+
+function trusted() {
+  {
+    printf "select $not_paired_adapter\n\n" # TODO: may need to change $(appropriate_adapter)
+    printf "info $device\n\n"
+  } | bluetoothctl | grep "Trusted: " | sed -r 's/^.*(yes|no).*$/\1/'
+}
+
+
+function connected() {
+  {
+    printf "select $(appropriate_adapter)\n\n"
+    printf "info $device\n\n"
+  } | bluetoothctl | grep "Connected: " | sed -r 's/^.*(yes|no).*$/\1/'
+}
+
+
+function appropriate_adapter() {
+  if [ "$not_paired_adapter" != "" ]; then
+    echo "$not_paired_adapter"
+  elif [ "$adapter" != "" ]; then
+    echo "$adapter"
+  else
+    echo "Fatal: The appropriate adapter not found" >&2
+    exit 2
+  fi
+}
+
+
+function health() {
+  systemctl status bluetooth
+  echo
+  systemctl --user status pulseaudio
+  echo
+  systemctl --user status dummy-sound
+}
+
+
+function refresh() {
+  confirm
+
+  echo "Deleting all paired devices..."
+  while [[ "$($PROGNAME list 2>/dev/null)" != "" ]]
+  do
+    $PROGNAME remove all
+    sleep $INTERVAL_AFTER_DAEMON_RESTART
+  done
+  echo
+
+  echo "Reloading daemons configuration..."
+  sudo systemctl daemon-reload
+  sleep $INTERVAL_AFTER_DAEMON_RESTART
+  echo
+
+  echo "Restarting Bluetooth daemon..."
+  sudo systemctl restart bluetooth
+  sleep $INTERVAL_AFTER_DAEMON_RESTART
+  while [[ "$(systemctl is-active bluetooth)" != "active" ]]
+  do
+    echo "Bluetooth daemon has not been restarted yet. Wait a sec..."
+    sleep $INTERVAL_AFTER_DAEMON_RESTART
+  done
+  echo
+
+  echo "Restarting PulseAudio daemon..."
+  systemctl --user restart pulseaudio
+  sleep $INTERVAL_AFTER_DAEMON_RESTART
+  while [[ "$(systemctl --user is-active pulseaudio)" != "active" ]]
+  do
+    echo "PulseAudio daemon has not been restarted yet. Wait a sec..."
+    sleep $INTERVAL_AFTER_DAEMON_RESTART
+  done
+  echo
+
+  echo "Restarting the dummy sound daemon..."
+  systemctl --user restart dummy-sound
+  sleep $INTERVAL_AFTER_DAEMON_RESTART
+  while [[ "$(systemctl --user is-active dummy-sound)" != "active" ]]
+  do
+    echo "The dummy sound daemon has not been restarted yet. Wait a sec..."
+    sleep $INTERVAL_AFTER_DAEMON_RESTART
+  done
+  echo
+
+  echo "Checking success of operation..."
+  echo
+
+  is_refreshed
+}
+
+
+function is_refreshed() {
+  devices="$($PROGNAME list 2>/dev/null)"
+  bluetooth_is_active="$(systemctl is-active bluetooth)"
+  pulseaudio_is_active="$(systemctl --user is-active pulseaudio)"
+  dummy_sound_is_active="$(systemctl --user is-active dummy-sound)"
+
+  if [[ $devices != "" ]]; then
+    echo -e "\033[1;91mAt least one device has not been deleted yet\033[00m" >&2
+  fi
+
+  if [[ $bluetooth_is_active != "active" ]]; then
+    echo -e "\033[1;91mBluetooth daemon is not running\033[00m" >&2
+  fi
+
+  if [[ $pulseaudio_is_active != "active" ]]; then
+    echo -e "\033[1;91mPulseAudio daemon is not running\033[00m" >&2
+  fi
+
+  if [[ $dummy_sound_is_active != "active" ]]; then
+    echo -e "\033[1;91mThe dummy sound daemon is not running\033[00m" >&2
+  fi
+
+  if [[ $devices = "" ]] && [[ $bluetooth_is_active = "active" ]] && [[ $pulseaudio_is_active = "active" ]] && [[ $dummy_sound_is_active = "active" ]]; then
+    echo -e "\033[1;92mDeleted all devices information and restart all daemons successfully!\033[00m"
+    echo -e "\033[1;93mIt is highly recommended to restart your computer\033[00m"
+  else
+    exit 2
+  fi
+}
+
+
+function play() {
+  echo "A sample audio will be played in 3 seconds. Make sure your headphone’s volume is not too large!"
+  sleep 3
+  aplay $SAMPLE_SOUND
+}
+
+
+function confirm() {
+  echo -e "\033[1;92mTIPS: It is highly recommended to execute this operation both before and after changing settings of Bluetooth and PulseAudio\033[00m"
+  echo
+  echo -e "This operation will delete all devices paired with adapters, and will restart Bluetooth and PulseAudio daemons to reflect changes of settings"
+  echo -n "Are you sure you want to continue? [y/n]: "
+
+  exec < /dev/tty
+  read confirmation
+  echo
+
+  if [ $confirmation != "y" ] && [ $confirmation != "Y" ] && [ $confirmation != "yes" ] && [ $confirmation != "Yes" ] && [ $confirmation != "YES" ]; then
+    echo "Canceled"
+    exit 1
+  fi
+}
+
+
+function pulse() {
+  watch -d -n 1 -t "$PROGNAME list-sink-inputs"
+}
+
+
+function list_sink_inputs() {
+  # terminal lines
+  lines="$(tput lines)"
+
+  pacmd="$(pacmd list-sink-inputs)"
+
+  # show full output
+  if [[ $lines -ge $(echo "${pacmd}" | wc -l) ]]; then
+    echo "${pacmd}"
+    exit 0
+  fi
+
+  pacmd_short="$(echo "${pacmd}" | grep             \
+               -e "sink input(s) available."        \
+               -e "index: [0-9]*"                   \
+               -e "state: [A-Z]*"                   \
+               -e "sink: [0-9]* <.*>"               \
+               -e "current latency: [0-9|\.]* ms"   \
+               -e "requested latency: [0-9|\.]* ms" \
+               -e "sample spec: "                   \
+               -e "properties:"                     \
+               -e "media\.role = "                  \
+               -e "media\.name = ")"
+
+  # show short output
+  if [[ $lines -ge $(echo "${pacmd_short}" | wc -l) ]]; then
+    echo "${pacmd_short}"
+    exit 0
+  fi
+
+  pacmd_short2="$(echo "${pacmd_short}" | grep       \
+                -e "sink input(s) available."        \
+                -e "index: [0-9]*"                   \
+                -e "current latency: [0-9|\.]* ms"   \
+                -e "requested latency: [0-9|\.]* ms" \
+                -e "sample spec: "                   \
+                -e "media\.role = "                  \
+                -e "media\.name = ")"
+
+  # show much shorter output
+  if [[ $lines -ge $(echo "${pacmd_short2}" | wc -l) ]]; then
+    echo "${pacmd_short2}"
+    exit 0
+  fi
+
+  pacmd_short3="$(echo "${pacmd_short2}" | grep    \
+                -e "index: [0-9]*"                 \
+                -e "current latency: [0-9|\.]* ms" \
+                -e "media\.role = "                \
+                -e "media\.name = ")"
+
+  echo "${pacmd_short3}"
+}
+
+
+function initialize_options() {
+  if [ -z "$retry_count" ]; then
+    retry_count=9223372036854775807
+  fi
+}
+
+
+function require() {
+  if [ "$1" = "" ]; then
+    echo "Fatal: The function "require" requires at least one argument" >&2
+    exit 2
+  fi
+
+  if ! type $1 1>/dev/null 2>/dev/null; then
+    echo "\"$1\" is not installed on this computer" >&2
+    echo "This operation requires \"$1\"" >&2
+    exit 2
+  fi
+}
+
+
+# cf. https://ytyaru.hatenablog.com/entry/2020/02/02/111111
+function is_integer() {
+  test 0 -eq $1 > /dev/null 2>&1 || expr $1 + 0 > /dev/null 2>&1
+}
+
+
+function usage() {
+  echo -e "Usage: $PROGNAME -h|--help"
+  printf  "       %${#PROGNAME}s [list]\n"
+  printf  "       %${#PROGNAME}s list [diff]\n"
+  printf  "       %${#PROGNAME}s alias [edit]\n"
+  printf  "       %${#PROGNAME}s info|status|register|BLUETOOTHCTL_COMMAND DEVICE_NAME|DEVICE_BD_ADDRESS\n"
+  echo
+  echo
+  echo -e "Description:"
+  echo -e "	Operate command \"bluetoothctl\" very easily and quickly"
+  echo
+  echo
+  echo -e "Arguments:"
+  echo -e "	[list]"
+  echo -e "		Show all devices paired with all adapters"
+  echo -e "		This operation is same without arguments"
+  echo
+  echo -e "	list diff"
+  echo -e "		Show diff between all paired devices and device address aliases"
+  echo
+  echo -e "	alias"
+  echo -e "		Show aliases written in $ALIASPATH"
+  echo -e "		This file should be written in the form of \"<DEVICE_BD_ADDRESS> <DEVICE_NAME>\""
+  echo -e "		You can use \"<DEVICE_NAME>\" written in this file as a device BD address alias"
+  echo
+  echo -e "	alias edit"
+  echo -e "		Edit $ALIASPATH with your environment's default editor"
+  echo
+  echo -e "	info|status DEVICE_NAME|DEVICE_BD_ADDRESS"
+  echo -e "		Show specified device's information"
+  echo
+  echo -e "	register DEVICE_NAME|DEVICE_BD_ADDRESS"
+  echo -e "		Pair, trust, and connect a specified device"
+  echo -e "		It attempts to pair the device forever unless it is not paired"
+  echo
+  echo -e "	BLUETOOTHCTL_COMMAND DEVICE_NAME|DEVICE_BD_ADDRESS"
+  echo -e "		Operate any bluetoothctl command to a specified device"
+  echo -e "		e.g. \"$PROGNAME connect macbook\""
+  echo -e "		     \"$PROGNAME disconnect macbook\""
+  echo -e "		     \"$PROGNAME remove macbook\""
+  echo
+  echo
+  echo -e "Tips:"
+  echo -e "	\"DEVICE_NAME\" doesn't have to be exactly matched"
+  echo -e "	For example, if \"DEVICE_NAME\" is \"MacBook Pro\", \"macbook\" is also valid"
+  echo -e "	unless it doesn't be duplicated with any other device BD address aliases"
+  echo
+  echo
+  echo -e "Options:"
+  echo -e "	-h, --help"
+  echo -e "		Show this help message and exit"
+  echo
+  echo -e "	-r NUMBER, --retry=NUMBER"
+  echo -e "		Retry only the specified number of times"
+  echo -e "		when executing the command that tries to be continued until succeeding"
+  echo -e "		If this option is not set, it tries to retry infinitely as long as not succeeding"
+  echo -e "		NOTE: This option is implemented only with \"$PROGNAME connect\" for now"
+}
+
+
+for opt in "$@"
+do
+  case "$opt" in
+    '-h' | '--help' )
+      usage
+      exit 0
+    ;;
+    '-r' | '--retry' | --retry=* )
+      if [[ "$1" =~ ^--retry= ]]; then
+        retry_count=$(echo $1 | sed -e 's/^--retry=//')
+      elif [[ -z "$2" ]] || [[ "$2" =~ ^-+ ]]; then
+        echo "$PROGNAME: \"$1\" requires an argument" 1>&2
+        exit 1
+      else
+        retry_count="$2"
+        shift 2
+      fi
+
+      if ! $(is_integer $retry_count && echo true || echo false); then
+        echo "\"$retry_count\" is not a number" 1>&2
+        exit 1
+      fi
+    ;;
+    '--' | '-' )
+      shift 1
+      param+=( "$@" )
+      break
+    ;;
+    -* )
+      echo "$PROGNAME: illegal option -- '$(echo $1 | sed 's/^-*//')'" 1>&2
+      exit 1
+    ;;
+    * )
+      if [[ ! -z "$1" ]] && [[ ! "$1" =~ ^-+ ]]; then
+        argv+=( "$1" )
+        shift 1
+
+      fi
+    ;;
+  esac
+
+done
+
+subcommand=${argv[0]}
+argv=( "${argv[@]:1}" )
+
+main

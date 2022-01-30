@@ -1,0 +1,47 @@
+#compdef marlin
+
+# Zsh completion for marlin
+
+_marlin() {
+  local -a operations
+  operations=(
+    "alias[Show aliases written in ~/.marlin_aliases]"
+    "connect[Connect specified devices]"
+    "delete[Delete specified devices paired with adapters]"
+    "disconnect[Disconnect specified devices]"
+    "info[Show specified devices' information]"
+    "list[Show all devices paired with adapters]"
+    "register[Pair, trust, and connect specified devices]"
+    "remove[Delete specified devices paired with adapters]"
+    "status[Show specified devices' information]"
+    "pulse[Watch all devices' information playing sounds in real time every second]"
+    "list-sink-inputs[Show all devices' information playing sounds]"
+    "log[Show latest autoconnector log in real time]"
+    "trust[Trust specified devices]"
+    "untrust[Untrust specified devices]"
+    "block[Block specified devices]"
+    "unblock[Unblock specified devices]"
+    "show[Show all adapters' information]"
+    "health[Show if it works properly]"
+    "refresh[Delete all devices paired with adapters, and restart Bluetooth and PulseAudio daemons]"
+    "is-refreshed[Check if all devices information has been deleted, and Bluetooth and PulseAudio daemons are active]"
+    "play[Play a sample audio to check whether the sound is clearly hearable]"
+  )
+
+  # https://stackoverflow.com/questions/17318913/make-zsh-complete-arguments-from-a-file#answer-17320342
+  local -a devices
+  devices=( all ${(uf)"$(cat ~/.marlin_aliases | awk '{ sub("#.*$", ""); print $0; }' | sed -e 's/[ \t]*$//' | sed -e 's/^[ \t]*//' | sed -e '/^$/d' | sed -r "s/([0-9A-F]{2}:){5}[0-9A-F]{2} //g" | sed -r "s/ /\\\ /g")"} )
+
+  _arguments '1: :->operation' '*: :->device'
+
+  case "$state" in
+    operation)
+      _values $state $operations
+      ;;
+    device)
+      _values $state $devices
+      ;;
+  esac
+}
+
+compdef _marlin marlin
