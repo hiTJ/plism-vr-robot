@@ -663,6 +663,26 @@ static void ir_toggle(void)
 
 static bool mp_do_refresh;
 
+static int save_div = 0;
+static void save_mp_angle(int x, int y){
+	if(save_div < 100){
+		save_div++;
+		return;
+	}else{
+		save_div = 0;
+	}
+
+	FILE *fp;
+	fp = fopen("angle.txt", "w");
+	if(fp == NULL){
+		printf("file open error");
+		return;
+	}
+	fprintf(fp, "%d,%d", x, y);
+	fclose(fp);
+	return;
+}
+
 static void mp_show(const struct xwii_event *event)
 {
 	static int32_t mp_x, mp_y;
@@ -720,7 +740,8 @@ static void mp_show(const struct xwii_event *event)
 	y = (y < 0) ? 0 : ((y > 7) ? 7 : y);
 
 	mvprintw(39 + y, 1 + x, "X");
-	mvprintw(47, 2,  " %d %d ", mp_x, mp_y);
+	mvprintw(47, 2,  " %d %d ", (mp_x*360/10000), (mp_y*360/10000));
+	save_mp_angle(mp_x*360/10000, mp_y*360/10000);
 }
 
 static void mp_clear(void)
