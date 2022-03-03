@@ -705,11 +705,14 @@ static void mp_show(const struct xwii_event *event)
 	mvprintw(i++, 1,  "-----------------------");
 
 	/* use x value unchanged for X-direction */
-	mp_x += x / 100;
-	mp_x = (mp_x < 0) ? 0 : ((mp_x > 10000) ? 10000 : mp_x);
+	mp_x += x / 1000;
+	//mp_x = (mp_x < 0) ? 0 : ((mp_x > 10000) ? 10000 : mp_x);
+	mp_x = (mp_x < 0) ? (mp_x + 10000) : ((mp_x > 10000) ? (mp_x - 10000) : mp_x);
+
 	/* use z value unchanged for Z-direction */
-	mp_y += z / 100;
-	mp_y = (mp_y < 0) ? 0 : ((mp_y > 10000) ? 10000 : mp_y);
+	mp_y += z / 1000;
+	//mp_y = (mp_y < 0) ? 0 : ((mp_y > 10000) ? 10000 : mp_y);
+	mp_y = (mp_y < 0) ? (mp_y + 10000) : ((mp_y > 10000) ? (mp_y - 10000) : mp_y);
 
 	x = mp_x * 22 / 10000;
 	x = (x < 0) ? 0 : ((x > 22) ? 22 : x);
