@@ -40,3 +40,20 @@ pair 8C:CD:E8:60:18:53
 connect 8C:CD:E8:60:18:53
 trust 8C:CD:E8:60:18:53
 ```
+
+# how to start
+
+proc 1
+```
+cd /plism-vr-robot/xwiimote
+xwiishow 1
+```
+
+proc 2
+```
+cd /plism-vr-robot/
+sudo python3 angleRead.py
+```
+
+- push A to cariblate   
+ now developping ...
