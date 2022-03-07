@@ -663,6 +663,26 @@ static void ir_toggle(void)
 
 static bool mp_do_refresh;
 
+static int save_div = 0;
+static void save_mp_angle(int x, int y){
+	if(save_div < 100){
+		save_div++;
+		return;
+	}else{
+		save_div = 0;
+	}
+
+	FILE *fp;
+	fp = fopen("angle.txt", "w");
+	if(fp == NULL){
+		printf("file open error");
+		return;
+	}
+	fprintf(fp, "%d,%d", x, y);
+	fclose(fp);
+	return;
+}
+
 static void mp_show(const struct xwii_event *event)
 {
 	static int32_t mp_x, mp_y;
@@ -705,11 +725,14 @@ static void mp_show(const struct xwii_event *event)
 	mvprintw(i++, 1,  "-----------------------");
 
 	/* use x value unchanged for X-direction */
-	mp_x += x / 100;
-	mp_x = (mp_x < 0) ? 0 : ((mp_x > 10000) ? 10000 : mp_x);
+	mp_x += x / 1000;
+	//mp_x = (mp_x < 0) ? 0 : ((mp_x > 10000) ? 10000 : mp_x);
+	mp_x = (mp_x < 0) ? (mp_x + 10000) : ((mp_x > 10000) ? (mp_x - 10000) : mp_x);
+
 	/* use z value unchanged for Z-direction */
-	mp_y += z / 100;
-	mp_y = (mp_y < 0) ? 0 : ((mp_y > 10000) ? 10000 : mp_y);
+	mp_y += z / 1000;
+	//mp_y = (mp_y < 0) ? 0 : ((mp_y > 10000) ? 10000 : mp_y);
+	mp_y = (mp_y < 0) ? (mp_y + 10000) : ((mp_y > 10000) ? (mp_y - 10000) : mp_y);
 
 	x = mp_x * 22 / 10000;
 	x = (x < 0) ? 0 : ((x > 22) ? 22 : x);
@@ -717,7 +740,8 @@ static void mp_show(const struct xwii_event *event)
 	y = (y < 0) ? 0 : ((y > 7) ? 7 : y);
 
 	mvprintw(39 + y, 1 + x, "X");
-	mvprintw(47, 2,  " %d %d ", mp_x, mp_y);
+	mvprintw(47, 2,  " %d %d ", (mp_x*360/10000), (mp_y*360/10000));
+	save_mp_angle(mp_x*360/10000, mp_y*360/10000);
 }
 
 static void mp_clear(void)
