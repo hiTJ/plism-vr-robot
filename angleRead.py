@@ -8,7 +8,10 @@ while(1):
 	f.close()
 	print(txt)
 	pos = txt.split(',')
-	shell = '~/Survo/Servo' + pos[0] + ' ' + pos[1]
-	proc = subprocess.run(shell, shell=True, stdout=PIPE, stderr=PIPE, text=True)
+	if(len(pos) > 1):
+		#shell = '/Servo/Servo ' + pos[0] + ' ' + pos[1]
+		shell = '/home/pi/plism-vr-robot/Servo/Servo ' + pos[0] + ' ' + pos[1]
+		#shell = 'pwd'
+		proc = subprocess.run(shell, shell=True, stdout=PIPE, stderr=PIPE, text=True)
 	print(proc)
-	time.sleep(1)
+	time.sleep(0.1)
