@@ -1,0 +1,2 @@
+gcc -Wall -r -o servo_lib.o servo_lib.c
+gcc -Wall -o Servo Servo.c servo_lib.o -lwiringPi

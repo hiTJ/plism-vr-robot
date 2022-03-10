@@ -676,7 +676,7 @@ static void save_mp_angle(int x, int y){
 	fp = fopen("angle.txt", "w");
 	if(fp == NULL){
 		printf("file open error");
-		return;
+		exit(1);
 	}
 	fprintf(fp, "%d,%d", x, y);
 	fclose(fp);
@@ -740,8 +740,8 @@ static void mp_show(const struct xwii_event *event)
 	y = (y < 0) ? 0 : ((y > 7) ? 7 : y);
 
 	mvprintw(39 + y, 1 + x, "X");
-	mvprintw(47, 2,  " %d %d ", (mp_x*360/10000), (mp_y*360/10000));
-	save_mp_angle(mp_x*360/10000, mp_y*360/10000);
+	mvprintw(47, 2,  " %d %d ", (mp_x*360/10000)-180, (mp_y*360/10000)-180);
+	save_mp_angle((mp_x*360/10000)-180, (mp_y*360/10000)-180);
 }
 
 static void mp_clear(void)
