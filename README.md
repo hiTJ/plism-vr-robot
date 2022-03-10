@@ -6,7 +6,7 @@ This repository is for plism.
 toolsあたりをうまく使えそう  
 core.cをいじるのもあり
 
-# hou to build xwiimote
+# how to build xwiimote
 
 first time only
 ```
