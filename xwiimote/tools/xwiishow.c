@@ -39,6 +39,7 @@ enum window_mode {
 static struct xwii_iface *iface;
 static unsigned int mode = MODE_ERROR;
 static bool freeze = false;
+static int32_t mp_x, mp_y = 0;
 
 /* error messages */
 
@@ -99,8 +100,11 @@ static void key_show(const struct xwii_event *event)
 	} else if (code == XWII_KEY_DOWN) {
 		mvprintw(6, 9, "%s", str);
 	} else if (code == XWII_KEY_A) {
-		if (pressed)
+		if (pressed){
+			mp_x = 5000;
+			mp_y = 5000;
 			str = "A";
+		}
 		mvprintw(10, 5, "%s", str);
 	} else if (code == XWII_KEY_B) {
 		if (pressed)
@@ -685,7 +689,6 @@ static void save_mp_angle(int x, int y){
 
 static void mp_show(const struct xwii_event *event)
 {
-	static int32_t mp_x, mp_y;
 	int32_t x, y, z, factor, i;
 
 	if (mp_do_refresh) {
