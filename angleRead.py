@@ -1,7 +1,8 @@
 import time
-import subprocess
-from subprocess import PIPE
+import servo
 import copy
+
+servo.init()
 
 pos = [0,0]
 posold = [0,0]
@@ -12,11 +13,8 @@ while(1):
 	print(txt)
 	pos = txt.split(',')
 	if(len(pos) > 1 and (pos[0] != posold[0] or pos[1] != posold[1])):
-		#shell = '/Servo/Servo ' + pos[0] + ' ' + pos[1]
-		shell = '/home/pi/plism-vr-robot/Servo/Servo ' + pos[0] + ' ' + pos[1]
-		#print('mp_x = ' + pos[0] + ', mp_y = ' + pos[1])
-		#shell = 'pwd'
-		proc = subprocess.run(shell, shell=True, stdout=PIPE, stderr=PIPE, text=True)
-	print(proc)
+		print('move to',pos[0],pos[1])
+		servo.set_h(int(pos[0]))
+		servo.set_v(int(pos[1]))
 	posold = copy.deepcopy(pos)
 	time.sleep(0.1)

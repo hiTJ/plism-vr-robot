@@ -40,6 +40,7 @@ static struct xwii_iface *iface;
 static unsigned int mode = MODE_ERROR;
 static bool freeze = false;
 static int32_t mp_x, mp_y = 0;
+static void refresh_all(void);
 
 /* error messages */
 
@@ -104,6 +105,7 @@ static void key_show(const struct xwii_event *event)
 			mp_x = 5000;
 			mp_y = 5000;
 			str = "A";
+			refresh_all();
 		}
 		mvprintw(10, 5, "%s", str);
 	} else if (code == XWII_KEY_B) {
@@ -669,7 +671,7 @@ static bool mp_do_refresh;
 
 static int save_div = 0;
 static void save_mp_angle(int x, int y){
-	if(save_div < 100){
+	if(save_div < 50){
 		save_div++;
 		return;
 	}else{
@@ -743,8 +745,8 @@ static void mp_show(const struct xwii_event *event)
 	y = (y < 0) ? 0 : ((y > 7) ? 7 : y);
 
 	mvprintw(39 + y, 1 + x, "X");
-	mvprintw(47, 2,  " %d %d ", (mp_x*360/10000)-180, (mp_y*360/10000)-180);
-	save_mp_angle((mp_x*360/10000)-180, (mp_y*360/10000)-180);
+	mvprintw(47, 2,  " %d %d ", ((mp_x*360/10000)-180)*(-1), ((mp_y*360/10000)-180)*(-1));
+	save_mp_angle(((mp_x*360/10000)-180)*(-1), ((mp_y*360/10000)-180)*(-1));
 }
 
 static void mp_clear(void)
